@@ -1,3 +1,12 @@
+## Notes
+
+This is a fork of the [StarGAN official respository](https://github.com/yunjey/stargan).
+The code is refocused only on CelebA and simplified for simplicity and
+demonstration purpose. Accompanying post at: 
+
+Original contents of the README file are present below.
+
+* * *
 ## StarGAN - Official PyTorch Implementation
 
 **\*\*\*\*\* New: StarGAN v2 is available at https://github.com/clovaai/stargan-v2 \*\*\*\*\***
