@@ -1,78 +1,54 @@
 from torch.utils import data
 from torchvision import transforms as T
 from torchvision.datasets import ImageFolder
+import torchvision
 from PIL import Image
 import torch
 import os
 import random
+import pandas as pd
+from typing import Any, Callable, List, Optional, Union, Tuple
 
 
-class CelebA(data.Dataset):
-    """Dataset class for the CelebA dataset."""
-
-    def __init__(self, image_dir, attr_path, selected_attrs, transform, mode):
+class CelebAExt(torchvision.datasets.CelebA):
+    def __init__(
+            self,
+            root_dir: str,
+            selected_attrs: Union[List[str]],
+            split: str = "train",
+            transform: Optional[Callable] = None
+    ) -> None:
         """Initialize and preprocess the CelebA dataset."""
-        self.image_dir = image_dir
-        self.attr_path = attr_path
-        self.selected_attrs = selected_attrs
-        self.transform = transform
-        self.mode = mode
-        self.train_dataset = []
-        self.test_dataset = []
-        self.attr2idx = {}
-        self.idx2attr = {}
-        self.preprocess()
+        super(CelebAExt, self).__init__(root=root_dir, split=split,
+                target_type="attr", transform=transform, download=False)
 
-        if mode == 'train':
-            self.num_images = len(self.train_dataset)
-        else:
-            self.num_images = len(self.test_dataset)
+        indices = []
+        for idx, x in enumerate(self.attr_names):
+            if (x in selected_attrs):
+                indices.append(idx)
 
-    def preprocess(self):
-        """Preprocess the CelebA attribute file."""
-        lines = [line.rstrip() for line in open(self.attr_path, 'r')]
-        all_attr_names = lines[1].split()
-        for i, attr_name in enumerate(all_attr_names):
-            self.attr2idx[attr_name] = i
-            self.idx2attr[i] = attr_name
+        self.attr = self.attr[:, indices]
 
-        lines = lines[2:]
-        random.seed(1234)
-        random.shuffle(lines)
-        for i, line in enumerate(lines):
-            split = line.split()
-            filename = split[0]
-            values = split[1:]
-
-            label = []
-            for attr_name in self.selected_attrs:
-                idx = self.attr2idx[attr_name]
-                label.append(values[idx] == '1')
-
-            if (i+1) < 2000:
-                self.test_dataset.append([filename, label])
-            else:
-                self.train_dataset.append([filename, label])
-
-        print('Finished preprocessing the CelebA dataset...')
+        self.num_images = len(self.filename)
 
     def __getitem__(self, index):
         """Return one image and its corresponding attribute label."""
-        dataset = self.train_dataset if self.mode == 'train' else self.test_dataset
-        filename, label = dataset[index]
-        image = Image.open(os.path.join(self.image_dir, filename))
-        return self.transform(image), torch.FloatTensor(label)
-
+        filename = self.filename[index]
+        label = self.attr[index]
+        image = Image.open(os.path.join(self.root, self.base_folder,
+        "img_align_celeba", filename))
+        return self.transform(image), torch.FloatTensor(label.float())
+ 
     def __len__(self):
         """Return the number of images."""
         return self.num_images
+ 
 
-
-def get_loader(image_dir, attr_path, selected_attrs, crop_size=178, image_size=128, 
-               batch_size=16, dataset='CelebA', mode='train', num_workers=1):
+def get_loader(root_dir, selected_attrs, crop_size=178, image_size=128, 
+               batch_size=16, split='train', num_workers=1):
     """Build and return a data loader."""
     transform = []
-    if mode == 'train':
+    if split == 'train':
         transform.append(T.RandomHorizontalFlip())
     transform.append(T.CenterCrop(crop_size))
     transform.append(T.Resize(image_size))
@@ -80,13 +56,10 @@ def get_loader(image_dir, attr_path, selected_attrs, crop_size=178, image_size=1
     transform.append(T.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)))
     transform = T.Compose(transform)
 
-    if dataset == 'CelebA':
-        dataset = CelebA(image_dir, attr_path, selected_attrs, transform, mode)
-    elif dataset == 'RaFD':
-        dataset = ImageFolder(image_dir, transform)
+    dataset = CelebAExt(root_dir, selected_attrs, split, transform)
 
     data_loader = data.DataLoader(dataset=dataset,
                                   batch_size=batch_size,
-                                  shuffle=(mode=='train'),
+                                  shuffle=(split=='train'),
                                   num_workers=num_workers)
     return data_loader
